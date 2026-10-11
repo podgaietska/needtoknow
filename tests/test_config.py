@@ -1,0 +1,49 @@
+import pytest
+from pydantic import ValidationError
+
+from needtoknow.config import Settings
+
+ENV = {
+    "DISCORD_TOKEN": "discord-secret",
+    "ANTHROPIC_API_KEY": "anthropic-secret",
+    "DATABASE_URL": "postgresql://u:db-secret@localhost/ntk",
+}
+
+
+@pytest.fixture
+def env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+
+
+@pytest.mark.usefixtures("env")
+def test_loads_from_environment() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.discord_token.get_secret_value() == "discord-secret"
+    assert settings.log_level == "INFO"
+
+
+@pytest.mark.usefixtures("env")
+def test_secrets_are_not_in_repr() -> None:
+    settings = Settings(_env_file=None)
+
+    text = repr(settings) + str(settings.model_dump())
+    for secret in ("discord-secret", "anthropic-secret", "db-secret"):
+        assert secret not in text
+
+
+def test_missing_secrets_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in ENV:
+        monkeypatch.delenv(key, raising=False)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+@pytest.mark.usefixtures("env")
+def test_rejects_unknown_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "LOUD")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

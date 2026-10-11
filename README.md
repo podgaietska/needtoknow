@@ -1,1 +1,26 @@
-# rag-acl
+# needtoknow
+
+> Answers questions from your server's history, on a need-to-know basis.
+
+A Discord bot that answers questions from a server's message history, using only
+the channels the person asking is allowed to see. Retrieval filters by the
+caller's live Discord permissions before anything reaches the LLM, and an audit
+log records what was retrieved for whom.
+
+## Development
+
+Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.12 if needed.
+
+```bash
+uv sync
+cp .env.example .env   # then fill in the tokens
+```
+
+Checks (the same ones CI runs):
+
+```bash
+uv run ruff check
+uv run ruff format --check
+uv run mypy
+uv run pytest
+```
