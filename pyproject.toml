@@ -8,14 +8,20 @@ authors = [
 ]
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.14",
+    "psycopg-pool>=3.2",
+    "psycopg[binary]>=3.2",
     "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0",
 ]
 
 [dependency-groups]
 dev = [
     "mypy>=1.13",
     "pytest>=8.3",
+    "pytest-asyncio>=0.24",
     "ruff>=0.8",
+    "testcontainers[postgres]>=4.8",
 ]
 
 [build-system]
@@ -29,16 +35,23 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "S"]
 
+[tool.ruff.lint.isort]
+# The local alembic/ migrations folder would otherwise make it look first-party.
+known-third-party = ["alembic"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert is how pytest works
+# assert is how pytest works; test databases use throwaway credentials and constant SQL.
+"tests/**" = ["S101", "S105", "S106", "S608"]
 
 [tool.mypy]
 strict = true
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
-files = ["src", "tests"]
+files = ["src", "tests", "alembic"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 xfail_strict = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
