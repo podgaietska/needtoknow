@@ -16,7 +16,18 @@ uv sync
 cp .env.example .env   # then fill in the tokens
 ```
 
-Checks (the same ones CI runs):
+Local Postgres (with pgvector) runs in Docker. The first start creates two roles:
+`needtoknow_owner` runs migrations, and `needtoknow_app` is what the bot uses.
+Every table has row-level security keyed on the guild, and neither role can
+bypass it.
+
+```bash
+docker compose up -d --wait
+uv run alembic upgrade head
+```
+
+Checks (the same ones CI runs). The integration tests start their own Postgres
+container, so they need Docker running:
 
 ```bash
 uv run ruff check
