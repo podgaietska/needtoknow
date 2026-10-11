@@ -13,7 +13,11 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", frozen=True)
+    # env_ignore_empty: `DEV_GUILD_ID=` (as in .env.example) means unset, and an
+    # empty `DISCORD_TOKEN=` fails as missing instead of loading as "".
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", frozen=True, env_ignore_empty=True
+    )
 
     discord_token: SecretStr
     anthropic_api_key: SecretStr
@@ -21,6 +25,9 @@ class Settings(BaseSettings):
     # which is subject to row-level security.
     database_url: SecretStr
     log_level: LogLevel = "INFO"
+    # Development: register slash commands on this one server, where they show up
+    # immediately. Unset: register them globally.
+    dev_guild_id: int | None = None
 
 
 class MigrationSettings(BaseSettings):

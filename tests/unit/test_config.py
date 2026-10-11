@@ -49,6 +49,23 @@ def test_rejects_unknown_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
         Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
 
 
+@pytest.mark.usefixtures("env")
+def test_dev_guild_id_is_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEV_GUILD_ID", "")
+    assert Settings(_env_file=None).dev_guild_id is None  # pyright: ignore[reportCallIssue]
+
+    monkeypatch.setenv("DEV_GUILD_ID", "1001")
+    assert Settings(_env_file=None).dev_guild_id == 1001  # pyright: ignore[reportCallIssue]
+
+
+@pytest.mark.usefixtures("env")
+def test_empty_token_counts_as_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_TOKEN", "")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+
+
 def test_migration_settings_need_only_the_owner_url(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in ENV:
         monkeypatch.delenv(key, raising=False)
