@@ -18,7 +18,7 @@ def env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.usefixtures("env")
 def test_loads_from_environment() -> None:
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
 
     assert settings.discord_token.get_secret_value() == "discord-secret"
     assert settings.log_level == "INFO"
@@ -26,7 +26,7 @@ def test_loads_from_environment() -> None:
 
 @pytest.mark.usefixtures("env")
 def test_secrets_are_not_in_repr() -> None:
-    settings = Settings(_env_file=None)
+    settings = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
 
     text = repr(settings) + str(settings.model_dump())
     for secret in ("discord-secret", "anthropic-secret", "db-secret"):
@@ -38,7 +38,7 @@ def test_missing_secrets_fail(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(key, raising=False)
 
     with pytest.raises(ValidationError):
-        Settings(_env_file=None)
+        Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
 
 
 @pytest.mark.usefixtures("env")
@@ -46,7 +46,7 @@ def test_rejects_unknown_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LOG_LEVEL", "LOUD")
 
     with pytest.raises(ValidationError):
-        Settings(_env_file=None)
+        Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
 
 
 def test_migration_settings_need_only_the_owner_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -54,6 +54,6 @@ def test_migration_settings_need_only_the_owner_url(monkeypatch: pytest.MonkeyPa
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("MIGRATION_DATABASE_URL", "postgresql://owner:owner-secret@localhost/ntk")
 
-    settings = MigrationSettings(_env_file=None)
+    settings = MigrationSettings(_env_file=None)  # pyright: ignore[reportCallIssue]
 
     assert "owner-secret" not in repr(settings)

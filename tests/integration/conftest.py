@@ -24,7 +24,7 @@ def database() -> Iterator[Database]:
         bootstrap(db.superuser_url)
         upgrade(db.owner_url)
         with psycopg.connect(db.superuser_url, autocommit=True) as conn:
-            conn.execute(SEED_SQL)
+            conn.execute(SEED_SQL)  # pyright: ignore[reportCallIssue, reportArgumentType]
         yield db
 
 

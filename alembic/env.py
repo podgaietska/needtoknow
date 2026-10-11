@@ -16,7 +16,7 @@ config = context.config
 # Tests pass the URL in directly and keep their own logging setup.
 url = config.attributes.get("url")
 if url is None:
-    url = MigrationSettings().migration_database_url.get_secret_value()
+    url = MigrationSettings().migration_database_url.get_secret_value()  # pyright: ignore[reportCallIssue]
     if config.config_file_name is not None:
         fileConfig(config.config_file_name, disable_existing_loggers=False)
 

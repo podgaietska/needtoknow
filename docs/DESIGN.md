@@ -75,7 +75,7 @@ Writes are checked too: inserting a row for another guild, or updating a row's
 application code, only `needtoknow.db.guild_scope()` sets it:
 
 ```python
-async with guild_scope(pool, guild_id) as conn:   # BEGIN; app.guild_id = guild_id (local)
+async with guild_scope(pool, guild_id) as conn:  # BEGIN; app.guild_id = guild_id (local)
     await conn.execute("SELECT ... FROM chunks")  # only this guild's rows exist here
 # COMMIT (or ROLLBACK on error); the setting ends with the transaction
 ```

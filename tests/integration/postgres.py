@@ -73,7 +73,7 @@ class Database:
 
 def bootstrap(superuser_url: str) -> None:
     with psycopg.connect(superuser_url, autocommit=True) as conn:
-        conn.execute(BOOTSTRAP_SQL.read_text())
+        conn.execute(BOOTSTRAP_SQL.read_text())  # pyright: ignore[reportCallIssue, reportArgumentType]
 
 
 def alembic_config(url: str) -> Config:

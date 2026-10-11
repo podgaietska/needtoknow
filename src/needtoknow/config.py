@@ -35,4 +35,4 @@ class MigrationSettings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Load settings once. Raises `pydantic.ValidationError` if any are missing."""
-    return Settings()
+    return Settings()  # pyright: ignore[reportCallIssue]

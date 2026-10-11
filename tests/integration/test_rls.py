@@ -114,7 +114,7 @@ async def test_cannot_touch_another_guilds_rows(pool: Pool) -> None:
 async def test_audit_log_is_append_only(pool: Pool, statement: str) -> None:
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         async with guild_scope(pool, GUILD_A) as conn:
-            await conn.execute(statement)
+            await conn.execute(statement)  # pyright: ignore[reportCallIssue, reportArgumentType]
 
 
 async def test_app_role_cannot_disable_rls(pool: Pool) -> None:
