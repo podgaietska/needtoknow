@@ -7,6 +7,16 @@ the channels the person asking is allowed to see. Retrieval filters by the
 caller's live Discord permissions before anything reaches the LLM, and an audit
 log records what was retrieved for whom.
 
+## How it works
+
+needtoknow is a **multi-tenant, permission-aware RAG** (retrieval-augmented
+generation) application. Each Discord server is a tenant. One bot and one
+Postgres database serve them all, and Postgres row-level security guarantees one
+server's content can never be returned to another, even if a query forgets to
+filter.
+
+See [docs/DESIGN.md](docs/DESIGN.md) for how it works.
+
 ## Development
 
 Requires [uv](https://docs.astral.sh/uv/). It installs Python 3.12 if needed.
