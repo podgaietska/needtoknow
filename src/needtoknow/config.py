@@ -17,9 +17,19 @@ class Settings(BaseSettings):
 
     discord_token: SecretStr
     anthropic_api_key: SecretStr
-    # SecretStr because the URL carries the DB password.
+    # SecretStr because the URL carries the DB password. Connects as the app role,
+    # which is subject to row-level security.
     database_url: SecretStr
     log_level: LogLevel = "INFO"
+
+
+class MigrationSettings(BaseSettings):
+    """Only what Alembic needs, so migrations don't require the bot's tokens."""
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", frozen=True)
+
+    # Connects as the schema owner role.
+    migration_database_url: SecretStr
 
 
 @lru_cache(maxsize=1)

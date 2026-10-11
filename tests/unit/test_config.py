@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from needtoknow.config import Settings
+from needtoknow.config import MigrationSettings, Settings
 
 ENV = {
     "DISCORD_TOKEN": "discord-secret",
@@ -47,3 +47,13 @@ def test_rejects_unknown_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_migration_settings_need_only_the_owner_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in ENV:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("MIGRATION_DATABASE_URL", "postgresql://owner:owner-secret@localhost/ntk")
+
+    settings = MigrationSettings(_env_file=None)
+
+    assert "owner-secret" not in repr(settings)
