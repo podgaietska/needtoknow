@@ -19,7 +19,9 @@ dependencies = [
 dev = [
     "mypy>=1.13",
     "pytest>=8.3",
+    "pytest-asyncio>=0.24",
     "ruff>=0.8",
+    "testcontainers[postgres]>=4.8",
 ]
 
 [build-system]
@@ -38,7 +40,8 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "S"]
 known-third-party = ["alembic"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]  # assert is how pytest works
+# assert is how pytest works; test databases use throwaway credentials and constant SQL.
+"tests/**" = ["S101", "S105", "S106", "S608"]
 
 [tool.mypy]
 strict = true
@@ -50,3 +53,5 @@ files = ["src", "tests", "alembic"]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config", "-ra"]
 xfail_strict = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
