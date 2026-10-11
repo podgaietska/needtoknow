@@ -16,6 +16,9 @@ dependencies = [
     "sqlalchemy>=2.0",
 ]
 
+[project.scripts]
+needtoknow = "needtoknow.__main__:main"
+
 [dependency-groups]
 dev = [
     "mypy>=1.13",
