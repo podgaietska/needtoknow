@@ -8,6 +8,7 @@ This document explains how that works. Each section describes something that is
 built and tested. Sections are added as more of the system lands.
 
 - [Tenants](#tenants)
+- [Connecting to Discord](#connecting-to-discord)
 - [Tenant isolation with row-level security](#tenant-isolation-with-row-level-security)
   - [The usual way, and why it's fragile](#the-usual-way-and-why-its-fragile)
   - [What we do instead](#what-we-do-instead)
@@ -28,6 +29,45 @@ The guarantee: **content from one server can never be returned to another.**
 
 Discord IDs (guilds, channels, messages, users) are snowflakes that are unique
 across all of Discord, so plain `id` primary keys never collide between tenants.
+
+---
+
+## Connecting to Discord
+
+The bot is one Python process (`uv run needtoknow`) built on discord.py. It
+holds a websocket to Discord, the **gateway**, which pushes events to it as
+they happen.
+
+**Intents** choose which events the gateway sends. The bot asks only for what it
+uses:
+
+| Intent | Why |
+|---|---|
+| `guilds` | Servers, channels, roles, and threads |
+| `guild_messages` | Messages created, edited, and deleted in servers |
+| `message_content` | The text of those messages. Privileged: it must also be enabled for the application in the Discord Developer Portal, or Discord refuses the connection |
+
+People talk to the bot through **slash commands**. Each one arrives as an
+**interaction**, which Discord sends with the server it came from and the
+member who ran it. On startup the bot uploads its command definitions to
+Discord: to one server when `DEV_GUILD_ID` is set (they appear there
+immediately), otherwise globally.
+
+Three rules apply to every command:
+
+- **Server only.** Commands can't be used in DMs. Every request belongs to a
+  server, and so to exactly one tenant.
+- **Private replies.** Replies are *ephemeral*: only the person who ran the
+  command sees them.
+- **No pings.** The client is created with `AllowedMentions.none()`, so nothing
+  the bot sends can notify `@everyone`, a role, or a user, whatever the text
+  contains.
+
+**Logs carry IDs, not content.** Logs are JSON lines on stderr, with guild,
+channel, and user IDs passed as fields. Message text never goes into them,
+because whoever reads the logs can't necessarily see every channel. discord.py
+logs raw gateway payloads (which include message text) at `DEBUG`, so its
+loggers are held at `INFO` or above even when the app runs at `DEBUG`.
 
 ---
 
