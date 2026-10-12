@@ -13,9 +13,10 @@ import discord
 type Target = discord.Role | discord.Member | discord.Object
 
 
-def role(role_id: int, permissions: int = 0) -> discord.Role:
+def role(role_id: int, permissions: int = 0, *, guild_id: int = 0) -> discord.Role:
     fake = MagicMock(spec=discord.Role)
     fake.id = role_id
+    fake.guild = SimpleNamespace(id=guild_id)
     fake.permissions = discord.Permissions(permissions)
     return cast(discord.Role, fake)
 
