@@ -15,6 +15,12 @@ built and tested. Sections are added as more of the system lands.
   - [Where the current guild comes from](#where-the-current-guild-comes-from)
   - [Closing the ways around RLS](#closing-the-ways-around-rls)
   - [How we know it holds](#how-we-know-it-holds)
+- [Channel permissions](#channel-permissions)
+  - [Why not store who can read each chunk](#why-not-store-who-can-read-each-chunk)
+  - [Discord's algorithm](#discords-algorithm)
+  - [Threads, forums, and categories](#threads-forums-and-categories)
+  - [Checking our math against Discord](#checking-our-math-against-discord)
+  - [How we know it's right](#how-we-know-its-right)
 - [Data model](#data-model)
 
 ---
@@ -204,6 +210,131 @@ As a check on the tests themselves: changing the policy to `USING (true)` makes
 
 ---
 
+## Channel permissions
+
+Row-level security answers *which server*. Inside a server, a member may read
+some channels and not others. The `needtoknow.authz` package answers *which
+channels*, using Discord's own permission rules. It is pure code (no Discord
+client, no database), so every rule is tested directly. A test fails if any
+module in `authz/` imports Discord or database code.
+
+### Why not store who can read each chunk
+
+The obvious design copies an "allowed roles" list onto every stored chunk. It
+breaks in two ways:
+
+- **It can't express Discord's rules.** A channel can deny `@everyone`, allow a
+  role, then deny one specific member of that role. "Allowed roles" can't say
+  that.
+- **It goes stale.** Who can read `#mod-chat` changes whenever someone gains or
+  loses a role or a channel's settings change. Every change would mean rewriting
+  every affected chunk, and until that finished, the old permissions would apply.
+
+Instead, content only records *where* it came from (guild and channel), and
+*who can read where* is computed when it's needed:
+
+```python
+visible_channels(guild_state, member) -> frozenset[int]   # channel IDs readable right now
+```
+
+Nothing about permissions is stored with content, so there's nothing to update
+when they change. Losing a role takes effect on the very next call.
+
+### Discord's algorithm
+
+Discord permissions are bit flags: one integer per role or overwrite, one bit per
+ability. Two bits decide reading: **View Channel** and **Read Message History**.
+Both must survive the calculation.
+
+Each channel can have **overwrites**: "in this channel, for this role (or this
+one member), force these bits off (deny) or on (allow)". `channel_permissions()`
+in `authz/discord_perms.py` follows Discord's documented order:
+
+1. **Owner or administrator?** The server owner, or anyone whose roles include
+   Administrator, gets every permission. Overwrites can't take anything away.
+2. **Server-wide permissions:** `@everyone`'s bits combined with the bits of
+   every role the member has. (`@everyone` is a role whose ID is the server's
+   ID. It always applies, whether or not it's in the member's role list.)
+3. **The channel's `@everyone` overwrite:** remove its denies, add its allows.
+4. **The member's role overwrites, together:** remove all of their denies, then
+   add all of their allows. So if one of a member's roles allows a bit and
+   another denies it, **allow wins**.
+5. **An overwrite for this specific member**, if any. It beats everything above.
+
+Worked example: `#mod-chat` denies View Channel to `@everyone` and allows it to
+`@Moderator`.
+
+| Step | Alice (`@Member`) | Bob (`@Member`, `@Moderator`) |
+|---|---|---|
+| Server-wide | view ✓ | view ✓ |
+| `@everyone` overwrite: deny view | view ✗ | view ✗ |
+| Role overwrites | none for `@Member`: view ✗ | `@Moderator` allows view: view ✓ |
+| Member overwrite | none | none |
+| **Can read?** | **no** | **yes** |
+
+A role ID that isn't in the server state grants nothing.
+
+### Threads, forums, and categories
+
+`authz/visibility.py` decides which channel's permissions govern a piece of
+content (`permission_channel_id()`):
+
+| Where the message is | Governed by |
+|---|---|
+| Text, announcement, or forum channel | Itself |
+| Public thread, announcement thread, forum post | Its parent channel |
+| Private thread | Nothing: never readable through the bot (it also needs thread membership, which isn't tracked) |
+| Voice channel, category, unknown channel | Nothing |
+
+Threads have no overwrites of their own, so a thread's permissions are its
+parent's. **Categories are never consulted:** when a channel is synced with its
+category, Discord copies the category's overwrites onto the channel, so the
+channel's own list is complete.
+
+`visible_channels()` lists only text, announcement, and forum channels. Content
+in a thread is attributed to its parent, so a member can read a thread's content
+exactly when they can read the parent.
+
+### Checking our math against Discord
+
+Every slash command interaction carries Discord's own computed permissions for
+the member in the channel where the command was run. `oracle_agrees()` in
+`authz/oracle.py` compares those with ours.
+
+It compares only what reading depends on, the View Channel bit and the
+"can read history" result, not the whole integer:
+
+- For administrators, Discord sends every permission it currently defines, while
+  we use all 64 bits. Those differ whenever Discord adds a permission.
+- Discord applies extra implicit rules (for example, removing other channel
+  permissions when View Channel is missing). They never change whether someone
+  can read, so they're not modelled.
+
+### How we know it's right
+
+- **Table tests**, one row per rule or edge case, including:
+  - `@everyone` deny plus role allow;
+  - one role's allow beating another role's deny;
+  - a role deny beating the `@everyone` overwrite's allow;
+  - member allow and deny overriding roles;
+  - an overwrite that allows and denies the same bit;
+  - View Channel without Read Message History;
+  - unknown roles;
+  - Administrator and owner bypass;
+  - threads and categories.
+- **The `@everyone` trap:** interaction payloads may or may not include
+  `@everyone` in a member's roles. If it were treated as an ordinary role, its
+  overwrite would be applied twice and could undo another role's deny. One test
+  is dedicated to this.
+- **A second implementation.** A deliberately naive reference, written in the
+  test suite, decides each bit separately by walking the rules from strongest to
+  weakest. Hypothesis generates 2,000 random servers (roles, overwrites for roles
+  and members, owners, unknown roles) and checks the two always agree.
+- **The tests catch real bugs.** Applying `@everyone` twice, letting a role deny
+  beat a role allow, or ignoring a member's allow each make the tests fail.
+
+---
+
 ## Data model
 
 All tables live in one migration-managed schema, and all are under the policy
@@ -213,7 +344,7 @@ above.
 |---|---|
 | `guilds` | Each server: owner, when the bot joined or was removed |
 | `roles` | Each role's server-wide permission bits |
-| `channels` | Channels and threads: kind, name, parent, permission overwrites, whether indexing is enabled |
+| `channels` | Channels and threads: kind (Discord's channel type number), name, parent, permission overwrites, whether indexing is enabled |
 | `messages` | Raw messages: author, content, reply target, timestamps |
 | `chunks` | Searchable text with a 384-dimension embedding and the IDs of the messages it was built from |
 | `opt_outs` | Users who asked not to be indexed |
