@@ -21,6 +21,10 @@ built and tested. Sections are added as more of the system lands.
   - [Threads, forums, and categories](#threads-forums-and-categories)
   - [Checking our math against Discord](#checking-our-math-against-discord)
   - [How we know it's right](#how-we-know-its-right)
+- [Keeping permission state current](#keeping-permission-state-current)
+  - [Events and what they change](#events-and-what-they-change)
+  - [Snapshots and what changed while offline](#snapshots-and-what-changed-while-offline)
+  - [When the stored state can't be trusted](#when-the-stored-state-cant-be-trusted)
 - [Data model](#data-model)
 
 ---
@@ -332,6 +336,87 @@ It compares only what reading depends on, the View Channel bit and the
   and members, owners, unknown roles) and checks the two always agree.
 - **The tests catch real bugs.** Applying `@everyone` twice, letting a role deny
   beat a role allow, or ignoring a member's allow each make the tests fail.
+
+---
+
+## Keeping permission state current
+
+The permission engine needs each server's owner, roles, and channel overwrites.
+The bot keeps a copy of them in Postgres (`guilds`, `roles`, `channels`), updated
+from gateway events, and loads it per server with
+`discord_state.store.load_guild_state()`:
+
+```
+gateway event ─► NeedToKnowBot.on_… ─► StateSync ─► convert ─► store (guild_scope) ─► Postgres
+                                                                                         │
+                       visible_channels(state, member) ◄── GuildState ◄── load_guild_state
+```
+
+Why a stored copy, rather than reading discord.py's in-memory objects:
+
+- **It sits behind the same isolation as everything else.** It is read and
+  written inside `guild_scope()`, so row-level security applies to it.
+- **The permission engine stays independent of discord.py.** `convert.py` is the
+  only place that reads discord.py objects; everything after it uses plain
+  records.
+- **It can be tested end to end without Discord.** Fake gateway events go in,
+  real Postgres rows come out, and the engine answers from them.
+
+### Events and what they change
+
+| Gateway event | Stored change |
+|---|---|
+| Server available (on connect, on joining, after an outage) | Full snapshot: see below |
+| Server updated | Owner (ownership can be transferred) |
+| Server removed (bot kicked or left) | `removed_at` set; loading returns nothing |
+| Role created or updated | That role's permission bits |
+| Role deleted | Role row removed |
+| Channel created or updated | Kind, name, parent, overwrites |
+| Channel deleted | Channel row removed, **with its messages and chunks** (cascade) |
+| Thread created, joined, or updated | Thread row, pointing at its parent |
+| Thread deleted | Thread row removed, with its messages and chunks |
+
+`indexing_enabled` and `last_message_id` belong to the bot, not to Discord, so
+updates never overwrite them.
+
+Writes for one server run one at a time, in the order the events arrived (a lock
+per server), so a quick update-then-delete can't be applied in the wrong order.
+
+### Snapshots and what changed while offline
+
+When the bot connects (or joins a server, or a Discord outage ends), Discord
+sends the server's full current state. `save_snapshot()` makes the stored copy
+match it:
+
+- Roles and channels **missing** from the snapshot were deleted while the bot
+  wasn't listening, so they're deleted here too, along with any messages and
+  chunks from those channels.
+- **Threads are the exception.** A snapshot lists only active threads, so a
+  missing thread may simply be archived. It is kept.
+- A server whose owner isn't known is refused: the owner gets every permission,
+  so it can't be guessed.
+
+### When the stored state can't be trusted
+
+`GatewayHealth.is_current(guild_id)` says whether a server's stored state can be
+used for permission decisions right now:
+
+| Situation | Current? |
+|---|---|
+| Connected, and this server's snapshot was saved in this session | Yes |
+| Disconnected for up to 30 seconds | Yes: on resume, Discord replays missed events |
+| Disconnected for longer | No |
+| Reconnected as a **new session** (Discord couldn't resume) | No, until this server's new snapshot is saved |
+| Saving one of this server's events failed | No, until it's repaired |
+| Server unavailable (Discord outage) or bot removed | No |
+
+A snapshot only counts for the session it was taken in. If the connection drops
+and a new session starts while an older snapshot is still being saved, that
+snapshot doesn't mark the server current.
+
+When saving an event fails, the server is marked stale and immediately rebuilt
+from discord.py's in-memory copy of the server, which already includes the
+change. If that copy isn't available either, the server stays stale.
 
 ---
 

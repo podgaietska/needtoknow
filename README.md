@@ -49,6 +49,9 @@ uv run alembic upgrade head
    Developer Mode, then right-click the server → Copy Server ID). Commands then
    appear there immediately instead of after global registration.
 
+The bot stores each server's roles and channels in Postgres, so the database must
+be running and migrated first (see above).
+
 ```bash
 uv run needtoknow
 ```
