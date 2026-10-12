@@ -36,6 +36,28 @@ docker compose up -d --wait
 uv run alembic upgrade head
 ```
 
+### Running the bot
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications),
+   create an application, open **Bot**, and copy its token into `DISCORD_TOKEN`.
+2. On the same page, under **Privileged Gateway Intents**, enable
+   **Message Content Intent**.
+3. Under **OAuth2 → URL Generator**, pick the scopes `bot` and
+   `applications.commands` and the permissions View Channels, Read Message
+   History, and Send Messages. Open the URL to invite the bot to your server.
+4. Optional: set `DEV_GUILD_ID` to your test server's ID (Discord: enable
+   Developer Mode, then right-click the server → Copy Server ID). Commands then
+   appear there immediately instead of after global registration.
+
+```bash
+uv run needtoknow
+```
+
+`/ping` in your server should answer `pong` with the gateway latency, visible
+only to you.
+
+### Checks
+
 Checks (the same ones CI runs). The integration tests start their own Postgres
 container, so they need Docker running:
 
