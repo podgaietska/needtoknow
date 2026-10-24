@@ -11,6 +11,13 @@ from discord import app_commands
 from needtoknow.bot import NeedToKnowBot
 from needtoknow.bot.client import build_intents, sync_commands
 from needtoknow.bot.commands import ping
+from needtoknow.db import create_pool
+from tests import fakes
+
+
+def make_bot() -> NeedToKnowBot:
+    # The pool is never opened: these tests don't touch the database.
+    return NeedToKnowBot(pool=create_pool("postgresql://unused"))
 
 
 def fake_interaction(latency: float) -> tuple[discord.Interaction, AsyncMock]:
@@ -30,7 +37,7 @@ def test_intents_are_only_what_we_use() -> None:
 
 
 async def test_bot_never_pings_anyone() -> None:
-    bot = NeedToKnowBot()
+    bot = make_bot()
 
     mentions = bot.allowed_mentions
     assert mentions is not None
@@ -38,7 +45,7 @@ async def test_bot_never_pings_anyone() -> None:
 
 
 async def test_ping_is_registered_and_server_only() -> None:
-    bot = NeedToKnowBot()
+    bot = make_bot()
 
     command = bot.tree.get_command("ping")
     assert isinstance(command, app_commands.Command)
@@ -80,3 +87,48 @@ async def test_sync_to_dev_guild() -> None:
     (guild,) = (call.kwargs["guild"] for call in tree.copy_global_to.call_args_list)
     assert guild.id == 1001
     tree.sync.assert_awaited_once_with(guild=guild)
+
+
+async def test_gateway_events_update_health() -> None:
+    bot = make_bot()
+
+    await bot.on_connect()
+    assert bot.health.session == 1
+
+    await bot.on_disconnect()
+    await bot.on_resumed()
+    assert bot.health.session == 1  # a resume isn't a new session
+
+
+async def test_events_are_forwarded_to_state_sync() -> None:
+    bot = make_bot()
+    state = AsyncMock()
+    bot.state = state
+    guild = fakes.guild(1, 10, roles=[], channels=[])
+    role = fakes.role(100, guild_id=1)
+    channel = fakes.channel(200, guild_id=1)
+    thread = fakes.thread(300, parent_id=200, guild_id=1)
+
+    await bot.on_guild_available(guild)
+    await bot.on_guild_join(guild)
+    await bot.on_guild_update(guild, guild)
+    await bot.on_guild_remove(guild)
+    await bot.on_guild_role_create(role)
+    await bot.on_guild_role_update(role, role)
+    await bot.on_guild_role_delete(role)
+    await bot.on_guild_channel_create(channel)
+    await bot.on_guild_channel_update(channel, channel)
+    await bot.on_guild_channel_delete(channel)
+    await bot.on_thread_create(thread)
+    await bot.on_thread_update(thread, thread)
+    await bot.on_raw_thread_delete(
+        discord.RawThreadDeleteEvent({"id": "300", "type": 11, "guild_id": "1", "parent_id": "200"})
+    )
+
+    assert state.guild_available.await_count == 2
+    state.guild_updated.assert_awaited_once_with(guild)
+    state.guild_removed.assert_awaited_once_with(1)
+    assert state.role_saved.await_count == 2
+    state.role_deleted.assert_awaited_once_with(role)
+    assert state.channel_saved.await_count == 4
+    assert [c.args for c in state.channel_deleted.await_args_list] == [(1, 200), (1, 300)]

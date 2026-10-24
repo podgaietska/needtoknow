@@ -5,6 +5,7 @@ from typing import Any
 
 import discord
 import pytest
+from psycopg_pool import PoolTimeout
 
 from needtoknow.__main__ import main
 from needtoknow.bot import NeedToKnowBot
@@ -48,6 +49,7 @@ def test_runs_the_bot_with_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     assert token == "discord-secret"
     assert log_handler is None
     assert bot.dev_guild_id == 1001
+    assert bot.pool.conninfo == ENV["DATABASE_URL"]
 
 
 def test_missing_settings_exit_with_names_not_values(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,6 +70,7 @@ def test_missing_settings_exit_with_names_not_values(monkeypatch: pytest.MonkeyP
     [
         (discord.LoginFailure("Improper token has been passed."), "DISCORD_TOKEN"),
         (discord.PrivilegedIntentsRequired(shard_id=None), "Privileged Gateway Intents"),
+        (PoolTimeout("couldn't get a connection"), "DATABASE_URL"),
     ],
 )
 def test_common_setup_errors_exit_with_a_hint(
